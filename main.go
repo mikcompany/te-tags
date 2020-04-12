@@ -18,6 +18,7 @@ func shouldDownloadNewJobs() bool {
 	currentYear, currentMonth, currentDay := time.Now().Date()
 	fileYear, fileMonth, fileDay := info.ModTime().Date()
 	if currentYear == fileYear && currentMonth == fileMonth && currentDay == fileDay {
+
 		log.Println("Jobs file already downloaded today.")
 		return false
 	}
