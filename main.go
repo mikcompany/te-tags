@@ -2,88 +2,52 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
-	"net/http"
+	"log"
+	"os"
+	"time"
 )
 
-const (
-	// TEURL is base url for data
-	TEURL = "https://paikat.te-palvelut.fi/tpt-api/tyopaikat?valitutAmmattialat=25&valitutAmmattialat=35&ilmoitettuPvm=1&vuokrapaikka=---&sort=mainAmmattiRivino%20asc,%20tehtavanimi%20asc,%20tyonantajanNimi%20asc,%20viimeinenHakupaivamaara%20asc&kentat=ilmoitusnumero,tyokokemusammattikoodi,ammattiLevel3,tehtavanimi,tyokokemusammatti,tyonantajanNimi,kunta,ilmoituspaivamaara,hakuPaattyy,tyoaikatekstiYhdistetty,tyonKestoKoodi,tyonKesto,tyoaika,tyonKestoTekstiYhdistetty,hakemusOsoitetaan,maakunta,maa,hakuTyosuhdetyyppikoodi,hakuTyoaikakoodi,hakuTyonKestoKoodi&rows=100&start=0&ss=true&facet.fkentat=hakuTyoaikakoodi,ammattikoodi,aluehaku,hakuTyonKestoKoodi,hakuTyosuhdetyyppikoodi,oppisopimus&facet.fsort=index&facet.flimit=-1"
-	// TEURLJOB is base url for job description
-	TEURLJOB = "https://paikat.te-palvelut.fi/tpt-api/tyopaikat/%v?kieli=fi"
-)
+func shouldDownloadNewJobs() bool {
+	info, err := os.Stat("descriptions.json")
+	if os.IsNotExist(err) {
+		log.Println("Jobs file does not exist.")
+		return true
+	}
 
-// TEData is main response from api
-type TEData struct {
-	Response TEResponse
+	currentYear, currentMonth, currentDay := time.Now().Date()
+	if fileYear, fileMonth, fileDay := info.ModTime().Date(); currentYear == fileYear && currentMonth == fileMonth && currentDay == fileDay {
+		log.Println("Jobs file already downloaded today.")
+		return false
+	}
+
+	log.Println("Jobs file is old.")
+	return true
 }
 
-type TEDataJob struct {
-	Response TEResponseJob
-}
-
-// TEResponse is actual response data from main response
-type TEResponse struct {
-	Docs []TEDoc
-}
-
-type TEResponseJob struct {
-	Docs []TEJob
-}
-
-// TEDoc is doc response from api
-type TEDoc struct {
-	ID    int    `json:"ilmoitusnumero"`
-	Title string `json:"tehtavanimi"`
-}
-
-// TEJob is the job description struct
-type TEJob struct {
-	Description string `json:"kuvausteksti"`
+func writeToFile(jobDescriptions []TEJob) error {
+	bytes, err := json.Marshal(jobDescriptions)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile("descriptions.json", bytes, 0644)
 }
 
 func main() {
 
-	response, err := http.Get(TEURL)
-	if err != nil {
-		panic(err)
-	}
-
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		panic(err)
-	}
-
 	var data TEData
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		panic(err)
+	if shouldDownloadNewJobs() {
+		log.Println("Downloading new jobs...")
+		data = FetchJobs()
+
+		var jobDescriptions []TEJob
+
+		for _, doc := range data.Response.Docs {
+			descriptions := FetchJobDescription(doc.ID)
+			jobDescriptions = append(jobDescriptions, descriptions...)
+		}
+
+		writeToFile(jobDescriptions)
+		log.Println("Tags file saved.")
 	}
-
-	var jobDescriptions []TEJob
-	for _, doc := range data.Response.Docs {
-
-		response, err := http.Get(fmt.Sprintf(TEURLJOB, doc.ID))
-		if err != nil {
-			panic(err)
-		}
-
-		body, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			panic(err)
-		}
-
-		var data TEDataJob
-		err = json.Unmarshal(body, &data)
-		if err != nil {
-			panic(err)
-		}
-
-		jobDescriptions = append(jobDescriptions, data.Response.Docs...)
-	}
-
-	bytes, err := json.Marshal(jobDescriptions)
-
-	ioutil.WriteFile("descriptions.json", bytes, 0644)
 }
