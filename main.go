@@ -50,6 +50,6 @@ func main() {
 		}
 
 		writeToFile(jobDescriptions)
-		log.Println("Tags file saved.")
+		log.Println("Jobs file saved.")
 	}
 }
